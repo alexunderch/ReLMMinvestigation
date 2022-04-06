@@ -160,7 +160,7 @@ def create_train_discrete_Q_sigmoid(logits_model, optimizer, discrete_dimension)
         grads = tape.gradient(loss, logits_model.trainable_variables)
         optimizer.apply_gradients(zip(grads, logits_model.trainable_variables))
 
-        return loss, logits_model
+        return loss
     return train
 
 

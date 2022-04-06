@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from collections import Callable
 from functools import partial
-
+import os
 
 @dataclass
 class GraspingExperiment(object):
@@ -48,8 +48,9 @@ class GraspingExperiment(object):
                                        for logits_model, optimizer in zip(self.logits_models, self.optimizers)
              ]
 
-        val = partial(self.validation_function, 
-                      discrete_dimensions = self.training_config['discrete_dimensions'] )
+        self.validation_function = partial(self.validation_function, 
+                                          discrete_dimension = self.training_config['discrete_dimensions'],
+                                          logits_model = self.logits_models)
         self.train_ = lambda data: [train(data) for train in tr]
 
         sampler_kwargs = self.sampler_config(True)
@@ -62,20 +63,22 @@ class GraspingExperiment(object):
                                      "min_samples_before_train": 0})
         self.eval_sampler =  self.eval_sampler(**eval_sampler_kwargs)
         return self
-    def run_experiment(self, loop_config: dict) -> dict:
+    def run_experiment(self, loop_config: dict, savedir: str) -> dict:
         """main class function"""   
         print("before loop")
         all_diagnostics, train_buffer, validation_buffer = training_loop(
                                                         env=self.environment, eval_env=self.eval_environment,
                                                         sampler=self.sampler, eval_sampler=self.eval_sampler,
-                                                        train_buffer=self.validation_buffer, validation_buffer=self.validation_buffer,
-                                                        train_function=self.train_, validation_function=self.validation_function,
+                                                        train_buffer=self.train_buffer, validation_buffer=self.validation_buffer,
+                                                        train_function=self.train_, validation_function=None,
                                                         **loop_config
                                                     )
-        print(all_diagnostics)
+        np.save(os.path.join(savedir, "diagnostics"), all_diagnostics)
+
 
 
 def train_grasp(args):
+    savedir = "/home/alex_ch/ReLMM/others/results"
     trainloop_hyperparams = {
         'num_samples_per_env': 4,
         'num_samples_per_epoch': 100,
@@ -87,18 +90,18 @@ def train_grasp(args):
         'train_batch_size': 128,
         'validation_prob': -1,
         'validation_batch_size': 128,
+        'pretrain': args.pretrain
     }
     training_hyperparams = {
         'image_size': 60,
         'discrete_dimensions': [15, 15, 5] if args.use_theta else [15, 15],
-        'num_models':6,
-        'pretrain': args.pretrain
+        'num_models': 6
     }
 
     room_hyperparams ={
         "room_name": "simple",
         "num_objects_min": 10,
-        "num_objects_max": 10,
+        "num_objects_max": 20,
         "use_theta": args.use_theta
     }
 
@@ -138,7 +141,7 @@ def train_grasp(args):
     experiment = experiment.setup(logits_model = plc.build_discrete_Q_model(image_size = training_hyperparams['image_size'], 
                                                                             discrete_dimension = np.prod(training_hyperparams['discrete_dimensions']),
                                                                             discrete_hidden_layers = [512, 512]))
-    experiment.run_experiment(loop_config=trainloop_hyperparams)
+    experiment.run_experiment(loop_config=trainloop_hyperparams, savedir=savedir)
     
 
 
@@ -151,17 +154,17 @@ if __name__ == "__main__":
     parser.add_argument("--name", help="name of experiment", type=str, default='')
     parser.add_argument("--load_data", help="whether to preload data", default=False, action="store_true")
     parser.add_argument("--use_theta", help="whether to use a grasp angle", default=False, action="store_true")
-    parser.add_argument("--rand_color_train", help="whether to randomize training object colors", default=False, action="store_true")
-    parser.add_argument("--rand_floor_train", help="whether to randomize training pos and floors", default=False, action="store_true")
-    parser.add_argument("--rand_color_eval", help="whether to randomize eval object colors", default=False, action="store_true")
-    parser.add_argument("--rand_floor_eval", help="whether to randomize eval pos and floors", default=False, action="store_true")
+    parser.add_argument("--rand_color_train", help="whether to randomize training object colors", default=True, action="store_true")
+    parser.add_argument("--rand_floor_train", help="whether to randomize training pos and floors", default=True, action="store_true")
+    parser.add_argument("--rand_color_eval", help="whether to randomize eval object colors", default=True, action="store_true")
+    parser.add_argument("--rand_floor_eval", help="whether to randomize eval pos and floors", default=True, action="store_true")
     parser.add_argument("--policy", help="name of policy", type=str, default='soft_q')
 
     parser.add_argument("--render_train", help="whether to render training env", default=False, action="store_true")
     parser.add_argument("--render_eval", help="whether to render eval env", default=False, action="store_true")
 
     parser.add_argument("--pretrain", help="number of steps to pretrain for", type=int, default=0)
-    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(300))
+    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(1e4))
 
     
     args = parser.parse_args()

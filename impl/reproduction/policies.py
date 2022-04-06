@@ -158,7 +158,7 @@ def build_image_deterministic_continuous_policy(
     model = tfk.Model(obs_in, squashed_out)
     unsquashed = tfk.Model(obs_in, action_out)
 
-    return model, unsquashed
+    return model
 
 def build_image_continuous_Q_function(
         image_size=100,

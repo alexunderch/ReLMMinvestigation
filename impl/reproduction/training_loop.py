@@ -56,7 +56,6 @@ def training_loop(
         pretrain=pretrain,
     ))
     print()
-    new_logits_model = None
     # training loop
     num_samples = train_buffer._num
     num_success_samples = 0
@@ -68,9 +67,13 @@ def training_loop(
     print("starting with ", train_buffer._num, "samples")
     print("pretraining for ", pretrain, "steps")
 
+    if pretrain:
+        obs, action, reward, _ = sampler(pretrain)
+        train_buffer.store_sample(obs, action, reward)
+
     for i in range(pretrain):
         data = train_buffer.sample_batch(train_batch_size)
-        losses, _ = train_function(data)
+        losses = train_function(data)
         print("pretrain", i, "losses", [loss.numpy() for loss in losses])
 
     all_grasps = []
@@ -150,7 +153,7 @@ def training_loop(
                 print("training")
                 for i in range(num_updates_per_timestep):
                     data = train_buffer.sample_batch(train_batch_size)
-                    losses, new_logits_model = train_function(data)
+                    losses = train_function(data)
                     if not isinstance(losses, (tuple, list)):
                         losses = [losses]
                     if len(total_training_losses) != len(losses):
@@ -186,13 +189,12 @@ def training_loop(
         if num_train_steps > 0:
             diagnostics['average_training_loss'] = [float(loss) / num_train_steps for loss in total_training_losses]
 
-        if validation_function is not None and new_logits_model is not None:
-            validation_function = functools.partial(logits_model = new_logits_model)
+        if validation_function is not None:
             if validation_buffer and validation_buffer.num_samples >= validation_batch_size:
                 datas = validation_buffer.get_all_samples_in_batch(validation_batch_size)
                 total_validation_loss = 0.0
                 for data in datas:
-                    total_validation_loss += validation_function(data, return_acc = False).numpy()
+                    total_validation_loss += validation_function(data = data, return_acc = False).numpy()
                 diagnostics['validation_loss'] = total_validation_loss / len(datas)
 
         success_ratio = successes_this_env / num_samples_this_env
