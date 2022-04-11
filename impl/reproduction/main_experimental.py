@@ -207,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--render_eval", help="whether to render eval env", default=False, action="store_true")
 
     parser.add_argument("--pretrain", help="number of steps to pretrain for", type=int, default=0)
-    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(100))
+    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(1e4))
 
     
     args = parser.parse_args()
