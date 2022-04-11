@@ -4,6 +4,8 @@ import argparse
 import glob
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+from typing import List
 
 from discretizer import Discretizer
 from envs import GraspingEnv
@@ -16,7 +18,23 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from collections import Callable
 from functools import partial
-import os
+import copy
+def make_plot(results: List[dict], labels: List[str], title: str) -> None:
+    """Visualizer"""
+    fig = plt.figure()
+    for ind, dict_ in enumerate(results):
+        steps, quals = [], []
+        for object_ in dict_:
+            obj_ = dict(object_) 
+            steps.append(obj_['num_samples_total'])  
+            quals.append(obj_['eval_success_ratio'])  
+        plt.plot(steps, quals, label = labels[ind])
+    plt.title("Strategies comparison")
+    plt.xlabel("#Steps")
+    plt.ylabel("Eval success ratio")
+    plt.legend(loc = 'best')
+    return fig
+
 
 @dataclass
 class GraspingExperiment(object):
@@ -73,7 +91,8 @@ class GraspingExperiment(object):
                                                         train_function=self.train_, validation_function=None,
                                                         **loop_config
                                                     )
-        np.save(os.path.join(savedir, "diagnostics"), all_diagnostics)
+        if savedir: np.save(os.path.join(savedir, "diagnostics"), all_diagnostics)
+        return all_diagnostics
 
 
 
@@ -101,47 +120,71 @@ def train_grasp(args):
     room_hyperparams ={
         "room_name": "simple",
         "num_objects_min": 10,
-        "num_objects_max": 20,
+        "num_objects_max": 10,
         "use_theta": args.use_theta
     }
 
-    sampling_hyperparams = lambda x: {
-        'alpha': 10.0,
-        'beta': 10.0 if x else 0.0,
-        'discretizer': Discretizer(sizes = training_hyperparams['discrete_dimensions'], 
-                                   mins = [0.3, -0.08], maxs = [0.4666666, 0.08]),
-        'min_samples_before_train': trainloop_hyperparams['min_samples_before_train'],
-        'deterministic': x,
-        'aggregate_func': "mean",
-        'uncertainty_func': "std" if x else None
-    }
+    # sampling_hyperparams = lambda x: {
+    #     'alpha': 10.0,
+    #     'beta': 10.0 if x else 0.0,
+    #     'discretizer': Discretizer(sizes = training_hyperparams['discrete_dimensions'], 
+    #                                mins = [0.3, -0.08], maxs = [0.4666666, 0.08]),
+    #     'min_samples_before_train': trainloop_hyperparams['min_samples_before_train'],
+    #     'deterministic': x,
+    #     'aggregate_func': "mean",
+    #     'uncertainty_func': "std" if x else None
+    # }
 
-    env = GraspingEnv(renders = args.render_train, rand_color = args.rand_color_train, 
-                      rand_floor = args.rand_floor_train, **room_hyperparams)
-    eval_env = GraspingEnv(renders = args.render_eval, rand_color = args.rand_color_eval, 
-                           rand_floor = args.rand_floor_eval, **room_hyperparams)
 
-    sampler = smpl.create_grasping_env_soft_q_sampler
-    eval_sampler = smpl.create_grasping_env_soft_q_sampler
+   
+    plot_data = []
+    labels = []
 
-    train_buffer = ReplayBuffer(size = trainloop_hyperparams['num_samples_total'],
-                                 observation_shape = (training_hyperparams['image_size'], training_hyperparams['image_size'], 3), 
-                                 action_dim = 1, raw_action_dim = (2,))
-    validation_buffer = ReplayBuffer(size = trainloop_hyperparams['num_samples_total'], 
-                                     observation_shape = (training_hyperparams['image_size'], training_hyperparams['image_size'], 3), 
-                                     action_dim = 1, raw_action_dim = (2,)) 
+    if args.name == "uncertainties": labels = [None, 'diff']#, 'std']
+    print("LABELS:", labels)
+    for label in labels:
+        env = GraspingEnv(renders = args.render_train, rand_color = args.rand_color_train, 
+                          rand_floor = args.rand_floor_train, **room_hyperparams)
+        eval_env = GraspingEnv(renders = args.render_eval, rand_color = args.rand_color_eval, 
+                              rand_floor = args.rand_floor_eval, **room_hyperparams)
 
+        sampler = smpl.create_grasping_env_soft_q_sampler
+        eval_sampler = smpl.create_grasping_env_soft_q_sampler
+
+        train_buffer = ReplayBuffer(size = trainloop_hyperparams['num_samples_total'],
+                                    observation_shape = (training_hyperparams['image_size'], training_hyperparams['image_size'], 3), 
+                                    action_dim = 1, raw_action_dim = (2,))
+        validation_buffer = ReplayBuffer(size = trainloop_hyperparams['num_samples_total'], 
+                                        observation_shape = (training_hyperparams['image_size'], training_hyperparams['image_size'], 3), 
+                                        action_dim = 1, raw_action_dim = (2,)) 
+
+              
+        sampling_hyperparams = lambda x: {
+                                          'alpha': 10.0,
+                                          'beta': 10.0 if x else 0.0,
+                                          'discretizer': Discretizer(sizes = training_hyperparams['discrete_dimensions'], 
+                                                                    mins = [0.3, -0.08], maxs = [0.4666666, 0.08]),
+                                          'min_samples_before_train': trainloop_hyperparams['min_samples_before_train'],
+                                          'deterministic': x,
+                                          'aggregate_func': "mean",
+                                          'uncertainty_func': label if x else None
+                                      }
+        experiment = GraspingExperiment(training_config=training_hyperparams, sampler_config = sampling_hyperparams,
+                                      environment=env, eval_environment=eval_env,
+                                      sampler=sampler, eval_sampler=eval_sampler,
+                                      training_function=trf.create_train_discrete_Q_sigmoid, train_buffer=train_buffer,
+                                      validation_function=trf.validation_discrete_sigmoid, validation_buffer=validation_buffer)
+
+        experiment = experiment.setup(logits_model = plc.build_discrete_Q_model(image_size = training_hyperparams['image_size'], 
+                                                                              discrete_dimension = np.prod(training_hyperparams['discrete_dimensions']),
+                                                                              discrete_hidden_layers = [512, 512]))
+        plot_data.append(experiment.run_experiment(loop_config=trainloop_hyperparams, savedir=None))
+
+    fig = make_plot(plot_data,
+                    labels = labels, 
+                    title = args.name)
+    fig.savefig(f"{args.name}.png")
     
-    experiment = GraspingExperiment(training_config=training_hyperparams, sampler_config = sampling_hyperparams,
-                                    environment=env, eval_environment=eval_env,
-                                    sampler=sampler, eval_sampler=eval_sampler,
-                                    training_function=trf.create_train_discrete_Q_sigmoid, train_buffer=train_buffer,
-                                    validation_function=trf.validation_discrete_sigmoid, validation_buffer=validation_buffer)
-
-    experiment = experiment.setup(logits_model = plc.build_discrete_Q_model(image_size = training_hyperparams['image_size'], 
-                                                                            discrete_dimension = np.prod(training_hyperparams['discrete_dimensions']),
-                                                                            discrete_hidden_layers = [512, 512]))
-    experiment.run_experiment(loop_config=trainloop_hyperparams, savedir=savedir)
     
 
 
@@ -164,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--render_eval", help="whether to render eval env", default=False, action="store_true")
 
     parser.add_argument("--pretrain", help="number of steps to pretrain for", type=int, default=0)
-    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(1e4))
+    parser.add_argument("--num_samples_total", help="number of samples total", type=int, default=int(100))
 
     
     args = parser.parse_args()
