@@ -184,7 +184,7 @@ def train_grasp(args):
                     labels = [str(label) for label in labels],
                     title = args.name)
     fig.savefig(f"{args.name}.png")
-    
+    plt.show()
     
 
 
