@@ -44,6 +44,7 @@ def install_mujoco(platform, version, mujoco_path):
     mujoco_dir_name = os.path.splitext(mujoco_zip_name)[0]
     if os.path.exists(os.path.join(mujoco_path, mujoco_dir_name)):
         print(f"MuJoCo {platform}, {version} already installed.")
+        os.environ['LD_LIBRARY_PATH'] = os.path.join(mujoco_path, "mujoco200", "bin")
         return
 
     mujoco_zip_url = f"https://www.roboti.us/download/{mujoco_zip_name}"
