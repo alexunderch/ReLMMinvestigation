@@ -9,12 +9,7 @@ apt-get install -y git\
                    ffmpeg\
                    curl\
                    patchelf\
-                   libglfw3\
-                   libglfw3-dev\
-                   cmake\ 
-                   zlib1g\
-                   zlib1g-dev\ 
-                   swig\
+                   libglfw3 libglfw3-dev cmake zlib1g zlib1g-dev swig\
                    wget\
                    unzip
 
