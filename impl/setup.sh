@@ -24,7 +24,7 @@ cp ../ReLMMinvestigation/impl/errata/setup.py setup.py
 rm softlearning/environments/gym/locobot/urdf/locobot_description.urdf 
 cp ../ReLMMinvestigation/impl/errata/locobot_description.urdf softlearning/environments/gym/locobot/urdf/locobot_description.urdf 
 rm -r others/*
-cp ../ReLMMinvestigation/impl/reproduction/* others/
+cp ../ReLMMinvestigation/impl/reproduction/*(.) others/
 
 pip install -e .
 
