@@ -97,7 +97,7 @@ class GraspingExperiment(object):
 
 
 def train_grasp(args):
-    savedir = "/home/alex_ch/ReLMM/others/results"
+    savedir = "."
     trainloop_hyperparams = {
         'num_samples_per_env': 4,
         'num_samples_per_epoch': 100,
@@ -140,7 +140,7 @@ def train_grasp(args):
     plot_data = []
     labels = []
 
-    if args.name == "uncertainties": labels = [None, 'diff']#, 'std']
+    if args.name == "uncertainties": labels = [None, 'diff', 'std']
     print("LABELS:", labels)
     for label in labels:
         env = GraspingEnv(renders = args.render_train, rand_color = args.rand_color_train, 
@@ -181,7 +181,7 @@ def train_grasp(args):
         plot_data.append(experiment.run_experiment(loop_config=trainloop_hyperparams, savedir=None))
 
     fig = make_plot(plot_data,
-                    labels = labels, 
+                    labels = [str(label) for label in labels],
                     title = args.name)
     fig.savefig(f"{args.name}.png")
     
